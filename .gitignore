@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Power BI temp / backups
+*.pbix.bak
+~$*
+
+# Local files kept out of the repo
+_local_test/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
