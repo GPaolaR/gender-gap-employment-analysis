@@ -1,0 +1,465 @@
+// =====================================================================
+// DAX measures - Gender gap in employment (Power BI)
+// Create them in an empty table called _Medidas (Home > Enter data).
+// Grain reminders:
+//   fact_indicator     one row = indicator x sex x country x year
+//   fact_gap           one row = gap metric x country x year
+//   fact_decomposition one row = component x decomposition x country x year
+// Averages over several years (e.g. 1995-97) come from the filter context.
+// =====================================================================
+
+
+// ---------------------------------------------------------------------
+// 1. Levels by sex (fact_indicator) -> A1, C1, C2, K1
+// ---------------------------------------------------------------------
+
+Valor =
+// Blank unless exactly one indicator is in context (avoids averaging
+// participation, unemployment and sectors together).
+IF (
+    HASONEVALUE ( dim_indicator[indicator_key] ),
+    AVERAGE ( fact_indicator[value] )
+)
+
+Mujeres =
+CALCULATE ( [Valor], fact_indicator[sex] = "female" )
+
+Hombres =
+CALCULATE ( [Valor], fact_indicator[sex] = "male" )
+
+Paridad (M/H) =
+// 1 = parity. Ratio of averages, not average of ratios.
+DIVIDE ( [Mujeres], [Hombres] )
+
+
+// ---------------------------------------------------------------------
+// 2. Gaps (fact_gap) -> titles, K1 reference line, C2 Duncan line
+//    Positive = women at a disadvantage (Duncan: no sign)
+// ---------------------------------------------------------------------
+
+Brecha =
+IF (
+    HASONEVALUE ( dim_metric[metric] ),
+    AVERAGE ( fact_gap[value] )
+)
+
+Brecha EPR =
+CALCULATE ( [Brecha], dim_metric[metric] = "epr_gap" )
+
+Brecha vulnerable =
+CALCULATE ( [Brecha], dim_metric[metric] = "vulnerable_gap" )
+
+Brecha Q =
+CALCULATE ( [Brecha], dim_metric[metric] = "q_gap" )
+
+Indice Duncan =
+CALCULATE ( [Brecha], dim_metric[metric] = "duncan_index" )
+
+
+// ---------------------------------------------------------------------
+// 3. Comparison periods (1995-97 vs 2022-24) -> sentences A1, C1, C2, S1
+//    REMOVEFILTERS(dim_year) so the result does not depend on the year
+//    shown in the visual; the country slicer still applies.
+// ---------------------------------------------------------------------
+
+Brecha EPR inicio =
+CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "start" )
+
+Brecha EPR fin =
+CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Cambio brecha EPR =
+// Positive = the gap narrowed
+[Brecha EPR inicio] - [Brecha EPR fin]
+
+
+// ---------------------------------------------------------------------
+// 4. Decompositions (fact_decomposition) -> A2, S1
+// ---------------------------------------------------------------------
+
+Componente (pp) =
+// Sum of components within each year, then average over the years in
+// context. Correct for one component (a bar segment) and for all
+// components together (the bar total = the gap).
+IF (
+    HASONEVALUE ( fact_decomposition[decomposition] ),
+    AVERAGEX (
+        VALUES ( dim_year[year] ),
+        CALCULATE ( SUM ( fact_decomposition[value_pp] ) )
+    )
+)
+
+Componente (% de la brecha) =
+// Share of the gap: component pp / gap pp, both averaged over the same years
+VAR Parte = [Componente (pp)]
+VAR Total =
+    CALCULATE ( [Componente (pp)], REMOVEFILTERS ( dim_component ) )
+RETURN
+    DIVIDE ( Parte, Total )
+
+
+// ---------------------------------------------------------------------
+// 5. Validation (compare with the preview printed by 04_build_tables.py)
+//    Expected: Chile 1995-97 EPR gap = 38.9; Brazil 2022-24 = 20.4
+// ---------------------------------------------------------------------
+
+
+// =====================================================================
+// PAGE 2 - ACCESS (A1, A2)
+// =====================================================================
+
+// --- Series for the A1 line chart (one measure per line = fixed colors)
+EPR Mujeres =
+CALCULATE ( [Mujeres], dim_indicator[indicator_key] = "epr" )
+
+EPR Hombres =
+CALCULATE ( [Hombres], dim_indicator[indicator_key] = "epr" )
+
+// --- Cards
+EPR Mujeres fin =
+CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+EPR Hombres fin =
+CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Paridad EPR fin =
+CALCULATE (
+    [Paridad (M/H)],
+    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+    dim_indicator[indicator_key] = "epr"
+)
+
+// --- Share of the EPR gap explained by participation (A2)
+Participacion % brecha EPR fin =
+CALCULATE (
+    [Componente (% de la brecha)],
+    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+    fact_decomposition[decomposition] = "epr_2parts",
+    dim_component[component] = "participation"
+)
+
+Participacion % brecha EPR inicio =
+CALCULATE (
+    [Componente (% de la brecha)],
+    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "start",
+    fact_decomposition[decomposition] = "epr_2parts",
+    dim_component[component] = "participation"
+)
+
+// --- Dynamic titles (Format > Title > fx > Field value > this measure)
+Titulo A1 =
+VAR Ini = [Brecha EPR inicio]
+VAR Fin = [Brecha EPR fin]
+VAR Verbo =
+    SWITCH ( TRUE (), ABS ( Ini - Fin ) < 0.5, "se mantuvo en", Ini > Fin, "se redujo de", "se amplió de" )
+RETURN
+    IF (
+        ABS ( Ini - Fin ) < 0.5,
+        "La brecha de empleo " & Verbo & " " & FORMAT ( Fin, "0.0" ) & " pp entre 1995–97 y 2022–24",
+        "La brecha de empleo " & Verbo & " " & FORMAT ( Ini, "0.0" ) & " a " & FORMAT ( Fin, "0.0" )
+            & " pp entre 1995–97 y 2022–24"
+    )
+
+Titulo A2 =
+"En 2022–24, el " & FORMAT ( [Participacion % brecha EPR fin], "0%" )
+    & " de la brecha de empleo se explica por la menor participación de las mujeres (en 1995–97: "
+    & FORMAT ( [Participacion % brecha EPR inicio], "0%" ) & ")"
+
+// --- Page sentence (text box or card)
+Frase A1 =
+"De cada 100 mujeres de 15 años o más, " & FORMAT ( [EPR Mujeres fin], "0" )
+    & " tenían empleo en 2022–24, frente a " & FORMAT ( [EPR Hombres fin], "0" )
+    & " de cada 100 hombres."
+
+// =====================================================================
+// PAGE 3 - QUALITY (C1, C2)
+// =====================================================================
+
+// --- Series for the C1 line chart
+Vulnerable Mujeres =
+CALCULATE ( [Mujeres], dim_indicator[indicator_key] = "vulnerable" )
+
+Vulnerable Hombres =
+CALCULATE ( [Hombres], dim_indicator[indicator_key] = "vulnerable" )
+
+// --- Period values
+Brecha vulnerable inicio =
+CALCULATE ( [Brecha vulnerable], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "start" )
+
+Brecha vulnerable fin =
+CALCULATE ( [Brecha vulnerable], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Vulnerable Mujeres fin =
+CALCULATE ( [Vulnerable Mujeres], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Vulnerable Hombres fin =
+CALCULATE ( [Vulnerable Hombres], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Duncan inicio =
+CALCULATE ( [Indice Duncan], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "start" )
+
+Duncan fin =
+CALCULATE ( [Indice Duncan], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+// --- Sector with the largest women-men difference in 2022-24 (C2)
+Sector mayor diferencia =
+VAR Sectores =
+    ADDCOLUMNS (
+        CALCULATETABLE ( VALUES ( dim_indicator[name_es] ), dim_indicator[block] = "sector" ),
+        "@dif",
+            ABS (
+                CALCULATE (
+                    [Mujeres] - [Hombres],
+                    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end"
+                )
+            )
+    )
+RETURN
+    MAXX ( TOPN ( 1, Sectores, [@dif], DESC ), dim_indicator[name_es] )
+
+Sector Mujeres fin =
+VAR S = [Sector mayor diferencia]   // a variable: CALCULATE filters cannot reference a measure directly
+RETURN
+    CALCULATE (
+        [Mujeres],
+        REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+        dim_indicator[name_es] = S
+    )
+
+Sector Hombres fin =
+VAR S = [Sector mayor diferencia]   // a variable: CALCULATE filters cannot reference a measure directly
+RETURN
+    CALCULATE (
+        [Hombres],
+        REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+        dim_indicator[name_es] = S
+    )
+
+// --- Dynamic titles
+Titulo C1 =
+// Gap = women - men; negative = employed women LESS vulnerable than men
+VAR Fin = [Brecha vulnerable fin]
+VAR Ini = [Brecha vulnerable inicio]
+VAR Texto =
+    SWITCH (
+        TRUE (),
+        ABS ( Fin ) < 0.5, "prácticamente el mismo porcentaje de empleo vulnerable que los hombres",
+        Fin < 0, FORMAT ( ABS ( Fin ), "0.0" ) & " pp menos empleo vulnerable que los hombres",
+        FORMAT ( Fin, "0.0" ) & " pp más empleo vulnerable que los hombres"
+    )
+RETURN
+    "En 2022–24, las mujeres ocupadas tenían " & Texto
+        & " (1995–97: " & FORMAT ( Ini, "+0.0;-0.0;0.0" ) & " pp)"
+
+Titulo C2 =
+VAR Ini = [Duncan inicio]
+VAR Fin = [Duncan fin]
+VAR Verbo =
+    SWITCH ( TRUE (), ABS ( Ini - Fin ) < 0.5, "se mantuvo", Fin > Ini, "aumentó", "disminuyó" )
+VAR Sector = LOWER ( SUBSTITUTE ( [Sector mayor diferencia], "Empleo en ", "" ) )
+RETURN
+    "La segregación por sectores " & Verbo & " (" & FORMAT ( Ini, "0" ) & "% → " & FORMAT ( Fin, "0" )
+        & "%). En 2022–24, el " & FORMAT ( [Sector Mujeres fin], "0" ) & "% de las mujeres ocupadas trabajaba en "
+        & Sector & ", frente al " & FORMAT ( [Sector Hombres fin], "0" ) & "% de los hombres"
+
+Frase C1 =
+"Entre las personas ocupadas, " & FORMAT ( [Vulnerable Mujeres fin], "0" )
+    & " de cada 100 mujeres y " & FORMAT ( [Vulnerable Hombres fin], "0" )
+    & " de cada 100 hombres tienen empleo vulnerable (2022–24)."
+
+
+// =====================================================================
+// PAGE 4 - CRISES (K1)
+// Bars: X = dim_year[window_es] (sorted by window_order), Y = [Brecha EPR],
+//       visual filter dim_year[crisis] = "2008" or "covid". [Brecha EPR]
+//       already averages the years of each window - no extra measure needed.
+// Lines: X = dim_year[year], Y = [EPR Mujeres], [EPR Hombres], same filter.
+// =====================================================================
+
+Titulo K1 2008 =
+VAR Cr = "2008"
+VAR A = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR B = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+VAR C = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "after" )
+VAR dH =
+    CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+        - CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR dM =
+    CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+        - CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR Durante = SWITCH ( TRUE (), ABS ( B - A ) < 0.5, "no cambió", B > A, "se amplió", "se redujo" )
+VAR Despues =
+    SWITCH ( TRUE (), ABS ( C - A ) < 0.5, "volvió a su nivel previo", C < A, "quedó por debajo del nivel previo", "quedó por encima del nivel previo" )
+RETURN
+    "Crisis 2008: durante la crisis la brecha de empleo " & Durante & " (" & FORMAT ( A, "0.0" ) & " → " & FORMAT ( B, "0.0" )
+        & " pp) y después " & Despues & " (" & FORMAT ( C, "0.0" ) & " pp). Cambio en la tasa de empleo: hombres "
+        & FORMAT ( dH, "+0.0;-0.0;0.0" ) & " pp, mujeres " & FORMAT ( dM, "+0.0;-0.0;0.0" ) & " pp."
+
+Titulo K1 covid =
+// Same as Titulo K1 2008, only Cr and the label change
+VAR Cr = "covid"
+VAR A = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR B = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+VAR C = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "after" )
+VAR dH =
+    CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+        - CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR dM =
+    CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "during" )
+        - CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = Cr, dim_year[window] = "before" )
+VAR Durante = SWITCH ( TRUE (), ABS ( B - A ) < 0.5, "no cambió", B > A, "se amplió", "se redujo" )
+VAR Despues =
+    SWITCH ( TRUE (), ABS ( C - A ) < 0.5, "volvió a su nivel previo", C < A, "quedó por debajo del nivel previo", "quedó por encima del nivel previo" )
+RETURN
+    "Pandemia: durante 2020–21 la brecha de empleo " & Durante & " (" & FORMAT ( A, "0.0" ) & " → " & FORMAT ( B, "0.0" )
+        & " pp) y en 2022–24 " & Despues & " (" & FORMAT ( C, "0.0" ) & " pp). Cambio en la tasa de empleo: hombres "
+        & FORMAT ( dH, "+0.0;-0.0;0.0" ) & " pp, mujeres " & FORMAT ( dM, "+0.0;-0.0;0.0" ) & " pp."
+
+
+// =====================================================================
+// PAGE 1 - THE ANSWER (S1)
+// Chart: stacked columns, X = dim_year[year], Y = [Componente (pp)],
+//        legend = dim_component[name_es], visual filter
+//        fact_decomposition[decomposition] = "q_2parts".
+//        Quality is negative in most years: it is drawn below 0.
+// =====================================================================
+
+Brecha Q fin =
+CALCULATE ( [Brecha Q], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Brecha Q inicio =
+CALCULATE ( [Brecha Q], REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "start" )
+
+Acceso fin =
+CALCULATE (
+    [Componente (pp)],
+    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+    fact_decomposition[decomposition] = "q_2parts",
+    dim_component[component] = "access"
+)
+
+Calidad fin =
+CALCULATE (
+    [Componente (pp)],
+    REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end",
+    fact_decomposition[decomposition] = "q_2parts",
+    dim_component[component] = "quality"
+)
+
+Q Mujeres fin =
+CALCULATE ( [Mujeres], dim_indicator[indicator_key] = "q", REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Q Hombres fin =
+CALCULATE ( [Hombres], dim_indicator[indicator_key] = "q", REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Titulo S1 =
+// Gap Q = access + quality. Quality < 0 means it REDUCES the gap.
+VAR Total = [Brecha Q fin]
+VAR Acc = [Acceso fin]
+VAR Cal = [Calidad fin]
+VAR TextoCalidad =
+    SWITCH (
+        TRUE (),
+        ABS ( Cal ) < 0.5, "la calidad del empleo prácticamente no la cambia",
+        Cal < 0, "la calidad del empleo la reduce en " & FORMAT ( ABS ( Cal ), "0.0" ) & " pp",
+        "la calidad del empleo la amplía en " & FORMAT ( Cal, "0.0" ) & " pp"
+    )
+RETURN
+    "En 2022–24, de cada 100 personas, las mujeres tenían " & FORMAT ( Total, "0.0" )
+        & " pp menos empleo no vulnerable que los hombres. La falta de acceso al empleo explica "
+        & FORMAT ( Acc, "0.0" ) & " pp; " & TextoCalidad & "."
+
+Frase S1 =
+"De cada 100 personas de 15 años o más, " & FORMAT ( [Q Mujeres fin], "0" )
+    & " mujeres y " & FORMAT ( [Q Hombres fin], "0" ) & " hombres tenían un empleo no vulnerable (2022–24)."
+
+// --- Population funnel chart (page 1)
+// Chart: 100% stacked columns, X = dim_year[comparison_label] then dim_sex[name_es],
+// Y = [Valor], legend = dim_indicator[name_es], visual filters:
+// dim_indicator[block] = "embudo", dim_year[comparison_label] is not blank.
+
+Fuera Mujeres fin =
+CALCULATE ( [Mujeres], dim_indicator[indicator_key] = "out_of_labor", REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Fuera Hombres fin =
+CALCULATE ( [Hombres], dim_indicator[indicator_key] = "out_of_labor", REMOVEFILTERS ( dim_year ), dim_year[comparison_period] = "end" )
+
+Titulo embudo =
+"De cada 100 personas de 15+ en 2022–24, " & FORMAT ( [Fuera Mujeres fin], "0" )
+    & " mujeres y " & FORMAT ( [Fuera Hombres fin], "0" )
+    & " hombres estaban fuera del mercado laboral"
+
+
+// =====================================================================
+// PAGE 1 - Dynamic conclusions by country
+// =====================================================================
+
+Pais seleccionado =
+SELECTEDVALUE ( dim_country[country_name_es], "los cinco países" )
+
+Conclusion Acceso =
+VAR Ini = [Brecha EPR inicio]
+VAR Fin = [Brecha EPR fin]
+VAR P = [Participacion % brecha EPR fin]
+VAR Cambio =
+    SWITCH (
+        TRUE (),
+        ABS ( Ini - Fin ) < 0.5, "se mantuvo en " & FORMAT ( Fin, "0.0" ) & " pp",
+        Ini > Fin, "se redujo de " & FORMAT ( Ini, "0.0" ) & " a " & FORMAT ( Fin, "0.0" ) & " pp",
+        "se amplió de " & FORMAT ( Ini, "0.0" ) & " a " & FORMAT ( Fin, "0.0" ) & " pp"
+    )
+RETURN
+    "En " & [Pais seleccionado] & ", la brecha de empleo " & Cambio & " entre 1995–97 y 2022–24. El "
+        & FORMAT ( P, "0%" ) & " de la brecha actual se debe a que menos mujeres participan en el "
+        & "mercado laboral, no a que no consigan empleo."
+
+Conclusion Calidad =
+VAR Fin = [Brecha vulnerable fin]   // women - men; negative = women less vulnerable
+VAR Texto =
+    SWITCH (
+        TRUE (),
+        ABS ( Fin ) < 0.5, "casi el mismo porcentaje de empleo vulnerable que los hombres",
+        Fin < 0, FORMAT ( ABS ( Fin ), "0.0" ) & " pp menos empleo vulnerable que los hombres",
+        FORMAT ( Fin, "0.0" ) & " pp más empleo vulnerable que los hombres"
+    )
+RETURN
+    "En " & [Pais seleccionado] & ", las mujeres que trabajan tienen " & Texto
+        & " (2022–24). Esta medida no capta la informalidad entre asalariados."
+
+Conclusion Crisis =
+VAR A08 = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "2008", dim_year[window] = "before" )
+VAR B08 = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "2008", dim_year[window] = "during" )
+VAR Acv = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "before" )
+VAR Bcv = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "during" )
+VAR Ccv = CALCULATE ( [Brecha EPR], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "after" )
+VAR dH =
+    CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "during" )
+        - CALCULATE ( [EPR Hombres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "before" )
+VAR dM =
+    CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "during" )
+        - CALCULATE ( [EPR Mujeres], REMOVEFILTERS ( dim_year ), dim_year[crisis] = "covid", dim_year[window] = "before" )
+VAR T08 =
+    SWITCH (
+        TRUE (),
+        ABS ( B08 - A08 ) < 0.5, "casi no cambió",
+        B08 < A08, "se redujo " & FORMAT ( A08 - B08, "0.0" ) & " pp",
+        "se amplió " & FORMAT ( B08 - A08, "0.0" ) & " pp"
+    )
+VAR Tcv =
+    SWITCH (
+        TRUE (),
+        ABS ( Bcv - Acv ) < 0.5, "casi no cambió",
+        Bcv < Acv, "se redujo " & FORMAT ( Acv - Bcv, "0.0" ) & " pp",
+        "se amplió " & FORMAT ( Bcv - Acv, "0.0" ) & " pp"
+    )
+VAR Quien = IF ( dH < dM, "los hombres", "las mujeres" )   // who lost more employment
+VAR Rcv =
+    SWITCH (
+        TRUE (),
+        ABS ( Ccv - Acv ) < 0.5, "volvió a su nivel previo",
+        Ccv < Acv, "quedó por debajo de su nivel previo",
+        "quedó por encima de su nivel previo"
+    )
+RETURN
+    "En " & [Pais seleccionado] & ", en la crisis de 2008 la brecha " & T08 & ". En la pandemia "
+        & Tcv & " porque " & Quien & " perdieron más empleo, y para 2022–24 " & Rcv & "."

@@ -1,0 +1,5 @@
+﻿metric,name_es,unit,sign_convention
+epr_gap,Brecha de empleo,pp,H − M; positivo = desventaja de las mujeres
+q_gap,Brecha de empleo no vulnerable,pp,H − M; positivo = desventaja de las mujeres
+vulnerable_gap,Brecha de empleo vulnerable,pp,M − H; positivo = desventaja de las mujeres
+duncan_index,Índice de segregación (Duncan),%,"sin signo: mide diferencia, no desventaja"

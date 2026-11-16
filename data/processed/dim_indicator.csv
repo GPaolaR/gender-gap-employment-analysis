@@ -1,0 +1,12 @@
+﻿indicator_key,name_es,block,base,wdi_code_female,wdi_code_male,source,sort_order,unit
+q,Empleo no vulnerable,embudo,población 15+,,,calculado: EPR × (1 − v),1,%
+vulnerable_emp,Empleo vulnerable,embudo,población 15+,,,calculado: EPR × v,2,%
+unemployed,Desempleo,embudo,población 15+,,,calculado: LFP × u,3,%
+out_of_labor,Fuera del mercado laboral,embudo,población 15+,,,calculado: 100 − LFP,4,%
+lfp,Tasa de participación,acceso,población 15+,SL.TLF.CACT.FE.ZS,SL.TLF.CACT.MA.ZS,wdi,5,%
+unemployment,Tasa de desempleo,acceso,fuerza laboral,SL.UEM.TOTL.FE.ZS,SL.UEM.TOTL.MA.ZS,wdi,6,%
+epr,Tasa de empleo (empleo/población),acceso,población 15+,,,calculado: LFP × (1 − u),7,%
+vulnerable,Empleo vulnerable (% de ocupados),calidad,ocupados,SL.EMP.VULN.FE.ZS,SL.EMP.VULN.MA.ZS,wdi,8,%
+agriculture,Empleo en agricultura,sector,ocupados,SL.AGR.EMPL.FE.ZS,SL.AGR.EMPL.MA.ZS,wdi,9,%
+industry,Empleo en industria,sector,ocupados,SL.IND.EMPL.FE.ZS,SL.IND.EMPL.MA.ZS,wdi,10,%
+services,Empleo en servicios,sector,ocupados,SL.SRV.EMPL.FE.ZS,SL.SRV.EMPL.MA.ZS,wdi,11,%
