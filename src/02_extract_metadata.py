@@ -1,3 +1,7 @@
+"""Export the metadata (definition, source, limitations) of every series.
+
+Output: data/raw/indicator_metadata.csv
+"""
 import wbgapi as wb
 import pandas as pd
 from pathlib import Path

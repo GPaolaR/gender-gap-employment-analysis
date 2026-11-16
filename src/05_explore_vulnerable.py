@@ -1,12 +1,6 @@
-"""Exploration: is the negative vulnerable-employment gap consistent over time?
+"""Exploration: split vulnerable employment into own-account and family work.
 
-Vulnerable employment = own-account workers + contributing family workers.
-Splitting it shows WHICH part makes women less vulnerable than men.
-
-Inputs:  data/processed/fact_indicator.csv   (from 04_build_tables.py)
-         data/raw/wdi_raw.csv                (family workers, validation series)
-Output:  reports/figures/vulnerable_check.png
-         + a summary table in the console
+Output: reports/figures/vulnerable_check.png
 """
 from pathlib import Path
 

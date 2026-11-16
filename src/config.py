@@ -1,3 +1,5 @@
+"""Countries and World Bank (WDI) series used by the pipeline."""
+
 COUNTRIES = ["ARG", "BRA", "CHL", "COL", "URY"]
 
 CORE = {

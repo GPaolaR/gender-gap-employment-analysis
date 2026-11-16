@@ -1,26 +1,7 @@
-"""Build the clean tables for Power BI.
+"""Build the Power BI star schema: indicators, gaps and decompositions.
 
-Steps
-    1. Load the raw World Bank snapshot and keep 1995-2025.
-    2. Reshape from wide (one column per series) to long (one row per value).
-    3. Map each WDI code to an indicator_key and a sex.
-    4. Compute EPR and Q from LFP, unemployment and vulnerable employment.
-       -> fact_indicator.csv
-    5. Gaps (positive = women at a disadvantage) and the Duncan index.
-       -> fact_gap.csv
-    6. Decompositions of the EPR gap (A2) and the Q gap (S1).
-       -> fact_decomposition.csv
-    7. Dimensions: country, year (periods, crisis windows, projections),
-       indicator, sex, gap metric and decomposition component.
-       -> dim_*.csv
-
-Input:  data/raw/wdi_raw.csv  (from 01_validate_api.py; columns economy, time
-        and one column per series, named as in config.INDICATORS)
-Output: data/processed/
-    fact_indicator.csv      country_code, year, indicator_key, sex, value
-    fact_gap.csv            country_code, year, metric, value, unit
-    fact_decomposition.csv  country_code, year, decomposition, component, value_pp, share_pct
-    dim_country.csv, dim_year.csv, dim_indicator.csv, dim_sex.csv, dim_metric.csv, dim_component.csv
+Input:  data/raw/wdi_raw.csv
+Output: data/processed/fact_*.csv and dim_*.csv  (gaps > 0 = women at a disadvantage)
 """
 from pathlib import Path
 

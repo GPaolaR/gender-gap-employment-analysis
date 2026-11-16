@@ -1,3 +1,7 @@
+"""Download the WDI series and check missing values and year coverage.
+
+Output: data/raw/wdi_raw.csv
+"""
 import wbgapi as wb
 import pandas as pd
 from pathlib import Path

@@ -1,14 +1,7 @@
-"""Compare World Bank (ILO modeled) values with national statistics.
+"""Compare World Bank values with national statistics (2010, 2019, 2022).
 
-Inputs:
-    data/raw/wdi_raw.csv                   (from the extraction script)
-    data/validation/national_values.csv    (filled in by hand, with sources)
-Output:
-    data/validation/comparison.csv
-
-Sign convention: every *_diff column is World Bank minus national
-(positive = the World Bank value is higher).
-Gaps: participation gap = male - female; unemployment gap = female - male.
+Input:  data/raw/wdi_raw.csv, data/validation/national_values.csv
+Output: data/validation/comparison.csv  (differences = World Bank - national)
 """
 from pathlib import Path
 
